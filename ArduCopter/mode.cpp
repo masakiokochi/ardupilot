@@ -65,6 +65,12 @@ Mode *Copter::mode_from_mode_num(const Mode::Number mode)
             break;
 #endif
 
+#if MODE_HANGHOLD_ENABLED == ENABLED
+        case Mode::Number::HANG_HOLD:
+            ret = &mode_hanghold;
+            break;
+#endif
+
 #if MODE_GUIDED_ENABLED == ENABLED
         case Mode::Number::GUIDED:
             ret = &mode_guided;
