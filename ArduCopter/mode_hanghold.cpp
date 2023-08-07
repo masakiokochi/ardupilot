@@ -1,3 +1,5 @@
+// HangHoldMode
+
 #include "Copter.h"
 
 #if MODE_HANGHOLD_ENABLED == ENABLED
