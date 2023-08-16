@@ -161,6 +161,9 @@ protected:
     // high level call to navigate to waypoint
     void navigate_to_waypoint();
 
+    // high level call to navigate to waypoint laterally
+    void navigate_to_waypoint_lateral();
+
     // calculate steering output given a turn rate and speed
     void calc_steering_from_turn_rate(float turn_rate, float speed, bool reversed);
 

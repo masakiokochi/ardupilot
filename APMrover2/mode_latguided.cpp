@@ -16,6 +16,9 @@ bool ModeLatGuided::_enter()
     sent_notification = false;
 
     gcs().send_text(MAV_SEVERITY_INFO, "Checked LatGuided Mode");
+    
+    // initialise heading to current heading
+    _desired_yaw_cd = ahrs.yaw_sensor;
 
     return true;
 }
@@ -28,7 +31,7 @@ void ModeLatGuided::update()
             // check if we've reached the destination
             if (!g2.wp_nav.reached_destination()) {
                 // update navigation controller
-                navigate_to_waypoint();
+                navigate_to_waypoint_lateral();
             } else {
                 // send notification
                 if (!sent_notification) {
