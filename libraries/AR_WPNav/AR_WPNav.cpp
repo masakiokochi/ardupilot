@@ -95,7 +95,7 @@ AR_WPNav::AR_WPNav(AR_AttitudeControl& atc, AP_Navigation& nav_controller) :
 // update navigation
 void AR_WPNav::update(float dt)
 {
-    // exit immediately if no current location, origin or destination
+
     Location current_loc;
     float speed;
     if (!hal.util->get_soft_armed() || !_orig_and_dest_valid || !AP::ahrs().get_position(current_loc) || !_atc.get_forward_speed(speed)) {
@@ -158,6 +158,74 @@ void AR_WPNav::update(float dt)
 
     // calculate desired speed
     update_desired_speed(dt);
+}
+
+// update navigation
+void AR_WPNav::latupdate(float dt)
+{
+
+    Location current_loc;
+    float speed;
+    if (!hal.util->get_soft_armed() || !_orig_and_dest_valid || !AP::ahrs().get_position(current_loc) || !_atc.get_forward_speed(speed)) {
+        _desired_speed_limited = _atc.get_desired_speed_accel_limited(0.0f, dt);
+        _desired_turn_rate_rads = 0.0f;
+        return;
+    }
+
+    // if no recent calls initialise desired_speed_limited to current speed
+    if (!is_active()) {
+        _desired_speed_limited = speed;
+    }
+    _last_update_ms = AP_HAL::millis();
+
+    // run path planning around obstacles
+    bool stop_vehicle = false;
+    AP_OAPathPlanner *oa = AP_OAPathPlanner::get_singleton();
+    if (oa != nullptr) {
+        const AP_OAPathPlanner::OA_RetState oa_retstate = oa->mission_avoidance(current_loc, _origin, _destination, _oa_origin, _oa_destination);
+        switch (oa_retstate) {
+        case AP_OAPathPlanner::OA_NOT_REQUIRED:
+            _oa_active = false;
+            break;
+        case AP_OAPathPlanner::OA_PROCESSING:
+        case AP_OAPathPlanner::OA_ERROR:
+            // during processing or in case of error, slow vehicle to a stop
+            stop_vehicle = true;
+            _oa_active = false;
+            break;
+        case AP_OAPathPlanner::OA_SUCCESS:
+            _oa_active = true;
+            break;
+        }
+    }
+    if (!_oa_active) {
+        _oa_origin = _origin;
+        _oa_destination = _destination;
+    }
+
+    update_distance_and_bearing_to_destination();
+
+    // check if vehicle has reached the destination
+    const bool near_wp = _distance_to_destination <= _radius;
+    const bool past_wp = !_oa_active && current_loc.past_interval_finish_line(_origin, _destination);
+    if (!_reached_destination && (near_wp || past_wp)) {
+       _reached_destination = true;
+    }
+
+    // handle stopping vehicle if avoidance has failed
+    if (stop_vehicle) {
+        // decelerate to speed to zero and set turn rate to zero
+        _desired_speed_limited = _atc.get_desired_speed_accel_limited(0.0f, dt);
+        _desired_lat_accel = 0.0f;
+        _desired_turn_rate_rads = 0.0f;
+        return;
+    }
+
+    // calculate the required turn of the wheels
+    update_steering(current_loc, speed);
+
+    // calculate desired speed
+    latupdate_desired_speed(dt);
 }
 
 // set desired location
@@ -414,6 +482,27 @@ void AR_WPNav::update_desired_speed(float dt)
     }
 
     _desired_speed_limited = des_speed_lim;
+}
+
+
+void AR_WPNav::latupdate_desired_speed(float dt)
+{
+    // reduce speed to zero during pivot turns
+    if (_pivot_active) {
+        // decelerate to zero
+        _desired_speed_limited = _atc.get_desired_speed_accel_limited(0.0f, dt);
+        return;
+    }
+    
+
+    // accelerate desired speed towards max
+    // no need to adjust desired speed with heading for latguided
+    //float des_speed_lim = _atc.get_desired_speed_accel_limited_lat(_reversed ? -_desired_speed : _desired_speed, dt);
+    float des_speed_lim = _desired_speed;
+
+    _desired_speed_limited = des_speed_lim;
+    // debug
+    //gcs().send_text(MAV_SEVERITY_INFO, "-----final des_speed_lim : %f", des_speed_lim);
 }
 
 // settor to allow vehicle code to provide turn related param values to this library (should be updated regularly)

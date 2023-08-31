@@ -263,6 +263,8 @@ void Mode::handle_tack_request()
 
 void Mode::calc_throttle(float target_speed, bool avoidance_enabled)
 {
+    // debug
+    //gcs().send_text(MAV_SEVERITY_INFO, "calc_throttle_1 target_speed : %f", target_speed);
     // get acceleration limited target speed
     target_speed = attitude_control.get_desired_speed_accel_limited(target_speed, rover.G_Dt);
 
@@ -296,6 +298,30 @@ void Mode::calc_throttle(float target_speed, bool avoidance_enabled)
 
     // send to motor
     g2.motors.set_throttle(throttle_out);
+}
+// この関数を使うのはまだ早い。飛ばしてある全ての関数を確認してからにする
+void Mode::calc_throttle_lateral(float target_speed, bool avoidance_enabled)
+{
+    // get acceleration limited target speed
+    target_speed = attitude_control.get_desired_speed_accel_limited(target_speed, rover.G_Dt);
+
+    // apply object avoidance to desired speed using half vehicle's maximum deceleration
+    if (avoidance_enabled) {
+        g2.avoid.adjust_speed(0.0f, 0.5f * attitude_control.get_decel_max(), ahrs.yaw, target_speed, rover.G_Dt);
+    }
+
+    // call throttle controller and convert output to -100 to +100 range
+    float throttle_out = 0.0f;
+
+    if (is_zero(target_speed)) {
+        bool stopped;
+        throttle_out = 100.0f * attitude_control.get_throttle_out_stop(g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt, stopped);
+    } else {
+        throttle_out = 100.0f * attitude_control.get_throttle_out_speed(target_speed, g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt);
+    }
+    
+    // send to motor
+    g2.motors.set_lateral(throttle_out);
 }
 
 // performs a controlled stop with steering centered
@@ -417,12 +443,19 @@ void Mode::navigate_to_waypoint()
 void Mode::navigate_to_waypoint_lateral()
 {
     // update navigation controller
-    g2.wp_nav.update(rover.G_Dt);
+    g2.wp_nav.latupdate(rover.G_Dt);
     _distance_to_destination = g2.wp_nav.get_distance_to_destination();
 
     // pass speed to throttle controller after applying nudge from pilot
     float desired_speed = g2.wp_nav.get_speed();
+
+    // debug
+    //gcs().send_text(MAV_SEVERITY_INFO, "navigate_to_wp_ltr_0 desired_speed : %f", desired_speed);
+
     desired_speed = calc_speed_nudge(desired_speed, g2.wp_nav.get_reversed());
+
+    // debug
+    //gcs().send_text(MAV_SEVERITY_INFO, "navigate_to_wp_ltr_1 desired_speed : %f", desired_speed);
 
     float desired_heading_cd = g2.wp_nav.oa_wp_bearing_cd();
     if (g2.sailboat.use_indirect_route(desired_heading_cd)) {
@@ -434,7 +467,24 @@ void Mode::navigate_to_waypoint_lateral()
         calc_steering_to_heading(desired_heading_cd, turn_rate);
     } else {
         // run steering, throttle, lateral controller
-        calc_throttle(desired_speed, true);
+        // get target location
+        Location target_location = g2.wp_nav.get_destination();
+        // get current location
+        //Location current_location = rover.current_loc;
+        // get target direction
+        float target_direction_cd = rover.current_loc.get_bearing_to(target_location);
+        // calc target direction from frame
+        float target_direction_from_frame_cd = target_direction_cd - ahrs.yaw_sensor;
+        // calc x y speed
+        float desired_x_speed = desired_speed * cosf(radians(target_direction_from_frame_cd * 0.01f));
+        //float desired_y_speed = desired_speed * sinf(radians(target_direction_from_frame_cd * 0.01f));
+
+        // debug
+        gcs().send_text(MAV_SEVERITY_INFO, "dsp : %f, rad : %f, xsp : %f", desired_speed, target_direction_from_frame_cd, desired_x_speed);
+        //gcs().send_text(MAV_SEVERITY_INFO, "target_direction : %f", target_direction_cd);
+        //gcs().send_text(MAV_SEVERITY_INFO, "target_direction_from_frame_cd : %f", target_direction_from_frame_cd);
+        
+        calc_throttle(desired_x_speed, false);
         calc_steering_to_heading(_desired_yaw_cd);
     }
 }

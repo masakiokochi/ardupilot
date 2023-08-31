@@ -140,6 +140,9 @@ public:
     // get acceleration limited desired speed
     float get_desired_speed_accel_limited(float desired_speed, float dt) const;
 
+    // get acceleration limited desired speed with latguided
+    float get_desired_speed_accel_limited_lat(float desired_speed, float dt) const;
+
     // get minimum stopping distance (in meters) given a speed (in m/s)
     float get_stopping_distance(float speed) const;
 
