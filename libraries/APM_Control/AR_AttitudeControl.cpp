@@ -747,6 +747,36 @@ float AR_AttitudeControl::get_desired_speed_accel_limited(float desired_speed, f
     return constrain_float(desired_speed, speed_prev - speed_change_max, speed_prev + speed_change_max);
 }
 
+// get acceleration limited desired speed with latguided
+float AR_AttitudeControl::get_desired_speed_accel_limited_lat(float desired_speed, float dt) const
+{
+    // return input value if no recent calls to speed controller
+    // apply no limiting when ATC_ACCEL_MAX is set to zero
+    if (!speed_control_active() || !is_positive(_throttle_accel_max)) {
+        return desired_speed;
+    }
+
+    // sanity check dt
+    dt = constrain_float(dt, 0.0f, 1.0f);
+
+    // use previous desired speed as basis for accel limiting
+    float speed_prev = _desired_speed;
+
+    // if no recent calls to speed controller limit based on current speed
+    if (!speed_control_active()) {
+        get_forward_speed(speed_prev);
+    }
+
+    // acceleration limit desired speed
+    float speed_change_max;
+    if (fabsf(desired_speed) < fabsf(_desired_speed) && is_positive(_throttle_decel_max)) {
+        speed_change_max = _throttle_decel_max * dt;
+    } else {
+        speed_change_max = _throttle_accel_max * dt;
+    }
+    return constrain_float(desired_speed, speed_prev - speed_change_max, speed_prev + speed_change_max);
+}
+
 // get minimum stopping distance (in meters) given a speed (in m/s)
 float AR_AttitudeControl::get_stopping_distance(float speed) const
 {

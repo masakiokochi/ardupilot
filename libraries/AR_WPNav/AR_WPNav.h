@@ -16,6 +16,9 @@ public:
     // update navigation
     void update(float dt);
 
+    // update navigation with latguided
+    void latupdate(float dt);
+
     // return desired speed
     float get_desired_speed() const { return _desired_speed; }
 
@@ -100,6 +103,7 @@ private:
     // relies on update_distance_and_bearing_to_destination and update_steering being run so these internal members
     // have been updated: _wp_bearing_cd, _cross_track_error, _distance_to_destination
     void update_desired_speed(float dt);
+    void latupdate_desired_speed(float dt);
 
     // returns true if vehicle should pivot turn at next waypoint
     bool use_pivot_steering_at_next_WP(float yaw_error_cd) const;
